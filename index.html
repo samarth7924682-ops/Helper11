@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predict Pro - Match Winner Predictions</title>
+
+    <!-- Preconnect: browser DNS+TLS handshake pehle hi shuru kar deta hai -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://api.imgbb.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #121418; --card-bg: #1e222b; --gold: #ffb703; --text: #ffffff; --gray: #94a3b8; --green: #2ecc71; --orange: #e67e22; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 16px; display: flex; justify-content: center; min-height: 100vh; }
+        .wrapper { width: 100%; max-width: 480px; }
+        header { text-align: center; margin-bottom: 18px; }
+        header h1 { font-family: 'Oswald', sans-serif; color: var(--gold); font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
+        header p { font-size: 11px; color: var(--gray); }
+
+        .section-label { font-family: 'Oswald', sans-serif; font-size: 13px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin: 14px 0 8px 2px; display: flex; align-items: center; gap: 6px; }
+        .section-label:first-child { margin-top: 0; }
+        .section-label::after { content: ""; flex: 1; height: 1px; background: rgba(255,183,3,0.15); }
+
+        .match-card { background: var(--card-bg); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid rgba(255,183,3,0.1); box-shadow: 0 4px 12px rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .match-left { flex: 1; min-width: 0; }
+        .match-time { font-size: 11px; font-weight: 600; color: var(--gray); text-transform: uppercase; margin-bottom: 2px; }
+        .teams { font-family: 'Oswald', sans-serif; font-size: 16px; color: var(--text); letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .match-right { flex-shrink: 0; text-align: right; }
+        .status-pill { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 3px 8px; border-radius: 20px; display: inline-block; margin-bottom: 6px; }
+        .status-locked { color: var(--gold); background: rgba(255,183,3,0.1); }
+        
+        .status-pending { color: var(--orange); background: rgba(230,126,34,0.12); }
+
+        .btn { background: var(--gold); color: #000; border: none; padding: 8px 12px; border-radius: 10px; font-weight: 700; font-size: 11px; cursor: pointer; text-transform: uppercase; white-space: nowrap; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-small { padding: 7px 10px; font-size: 10px; }
+        .btn-full { width: 100%; padding: 12px; font-size: 13px; }
+        .pending-pill-text { font-size: 10px; color: var(--orange); font-weight: 600; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background: var(--card-bg); width: 100%; max-width: 360px; padding: 25px; border-radius: 20px; text-align: center; border: 1px solid var(--gold); max-height: 90vh; overflow-y: auto; }
+        .modal-content h3 { font-family: 'Oswald', sans-serif; color: var(--gold); font-size: 20px; margin-bottom: 10px; }
+        .qr-box { background: #fff; padding: 10px; border-radius: 12px; display: inline-block; margin: 15px 0; }
+        .qr-box img { width: 150px; height: 150px; display: block; object-fit: contain; }
+
+        .file-upload-box { margin: 12px 0; text-align: left; }
+        .file-upload-box label { font-size: 11px; color: var(--gray); display: block; margin-bottom: 5px; text-transform: uppercase; font-weight: 600; }
+        input[type="file"] { width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--gray); border-radius: 10px; color: #fff; font-size: 12px; }
+        .preview-box { margin-top: 8px; display: none; }
+        .preview-box img { max-width: 100%; max-height: 120px; border-radius: 8px; display: block; margin: 0 auto; }
+        .compress-note { font-size: 10px; color: var(--gray); margin-top: 4px; }
+        .close-btn { background: #e74c3c; color: #fff; margin-top: 10px; width: 100%; padding: 12px; }
+
+        /* Winner popup */
+        .winner-modal-content { background: linear-gradient(160deg, #1e222b, #14161c); border: 1px solid var(--gold); }
+        .winner-trophy { font-size: 42px; margin-bottom: 8px; }
+        .winner-label { font-size: 11px; color: var(--gray); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .winner-teams-small { font-size: 12px; color: var(--gray); margin-bottom: 14px; }
+        .winner-name { font-family: 'Oswald', sans-serif; font-size: 26px; color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 18px; word-break: break-word; }
+    </style>
+</head>
+<body>
+
+    <div class="wrapper">
+        <header>
+            <h1>Helper 11</h1>
+            <p>90% Accuracy (Results By Top Analysts)</p>
+        </header>
+
+        <div id="matchContainer">
+            <div style="text-align:center; color:var(--gray);">Loading live matches...</div>
+        </div>
+    </div>
+
+    <!-- Scanner & Screenshot Modal -->
+    <div class="modal" id="payModal">
+        <div class="modal-content">
+            <h3>Scan & Pay ₹21</h3>
+            <p style="font-size: 12px; color: var(--gray);">Scan QR code or use UPI ID below to pay.</p>
+
+            <div class="qr-box">
+                <img id="dynamicQRImg" src="" alt="Admin UPI QR">
+            </div>
+
+            <p style="font-size: 12px; color: var(--gold); font-weight: 600;" id="dynamicUpiText">Loading UPI...</p>
+
+            <div class="file-upload-box">
+                <label>Upload Payment Screenshot</label>
+                <input type="file" id="screenshotInput" accept="image/*" onchange="onScreenshotSelected(event)">
+                <div class="preview-box" id="previewBox">
+                    <img id="previewImg" src="" alt="Preview">
+                    <div class="compress-note" id="compressNote"></div>
+                </div>
+            </div>
+
+            <button class="btn btn-full" id="submitBtn" onclick="submitPayment()">Submit Screenshot</button>
+            <button class="btn close-btn" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Winner Popup Modal -->
+    <div class="modal" id="winnerModal">
+        <div class="modal-content winner-modal-content">
+            <div class="winner-trophy">🏆</div>
+            <div class="winner-label">Predicted Winner</div>
+            <div class="winner-name" id="winnerNameText"></div>
+            <div class="winner-teams-small" id="winnerTeamsText"></div>
+            <button class="btn close-btn" onclick="closeWinnerModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyCFKhWdoGWWjIs7Z6yIEOZdx58ybp07jD0",
+          authDomain: "playing11-819b0.firebaseapp.com",
+          projectId: "playing11-819b0"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // ---- Offline persistence: local matches cache (IndexedDB) ----
+        // Isse baar baar page open karne par matches turant cache se aa jaate hain
+        // (0 reads) aur sirf naye/hate hue matches hi Firestore se fetch (billed) hote hain.
+        db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+            console.warn("Persistence not enabled (multi-tab or unsupported browser):", err.code);
+        });
+
+        const IMGBB_API_KEY = "d31576e535f3516a79211d96d1b21ffa";
+        const LS_MATCHES_KEY = "predict_matches_snapshot_v1";
+        const LS_ADMIN_KEY = "predict_admin_settings_v1";
+        const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — QR/UPI rarely changes
+
+        // 🔗 MatchHub Central — schedule + winner ab yahan se aata hai (API ke zariye).
+        // Winner "unlock" (₹21 payment) ka poora system Predict Pro ke apne Firebase
+        // project me hi hai — Hub sirf raw schedule/winner deta hai, dikhana kab hai
+        // ye faisla neeche unlocked_matches wala listener hi karta hai (jaisa pehle tha).
+        const HUB_API_URL = "https://matchhub-api.pages.dev/api/matches";
+        const HUB_SITE_API_KEY = "site_fe330f77e760f4f9e8ff373b7fecd30b"; // hub-admin.html → Sites Manager se milegi
+        const HUB_POLL_MS = 30 * 1000; // har 30 second me refresh (API real-time nahi hai)
+
+        let guestId = localStorage.getItem("predict_guest_id");
+        if (!guestId) {
+            guestId = "USR_" + Math.random().toString(36).substring(2, 11) + Date.now();
+            localStorage.setItem("predict_guest_id", guestId);
+        }
+
+        let selectedMatchId = null;
+        let compressedBlob = null;
+
+        // Live in-memory state, kept in sync by the three listeners below
+        let matchesArr = [];
+        let unlockedIds = [];
+        let pendingIds = [];
+        let renderScheduled = false;
+
+        function getDateLabel(ts) {
+            if (!ts || typeof ts.toDate !== "function") return "Upcoming";
+            const d = ts.toDate();
+            const today = new Date();
+            const tomorrow = new Date();
+            tomorrow.setDate(today.getDate() + 1);
+
+            const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+            if (sameDay(d, today)) return "Today";
+            if (sameDay(d, tomorrow)) return "Tomorrow";
+            return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        }
+
+        // Batch multiple near-simultaneous listener callbacks into a single render (1 frame)
+        function scheduleRender() {
+            if (renderScheduled) return;
+            renderScheduled = true;
+            requestAnimationFrame(() => {
+                renderScheduled = false;
+                render();
+            });
+        }
+
+        function render() {
+            const container = document.getElementById("matchContainer");
+
+            if (!matchesArr.length) {
+                container.innerHTML = `<div style="text-align:center; color:var(--gray); padding:20px;">No matches available right now. Check back soon!</div>`;
+                return;
+            }
+
+            let html = "";
+            let lastLabel = null;
+
+            matchesArr.forEach(m => {
+                const mId = m._id;
+                const isUnlocked = unlockedIds.includes(mId);
+                const isPending = pendingIds.includes(mId);
+
+                const label = getDateLabel(m.timestamp);
+                if (label !== lastLabel) {
+                    html += `<div class="section-label">${label}</div>`;
+                    lastLabel = label;
+                }
+
+                let statusPill = `<span class="status-pill status-locked">Locked</span>`;
+                let actionBox = `<button class="btn btn-small" onclick="openModal('${mId}')">Pay ₹21</button>`;
+
+                if (isUnlocked) {
+                    statusPill = `<span class="status-pill status-unlocked"></span>`;
+                    const safeWinner = String(m.winner || "").replace(/'/g, "\\'");
+                    const safeTeams = String(`${m.team1} vs ${m.team2}`).replace(/'/g, "\\'");
+                    actionBox = `<button class="btn btn-small" onclick="showWinnerModal('${safeWinner}', '${safeTeams}')"> VIEW REPORT</button>`;
+                } else if (isPending) {
+                    statusPill = `<span class="status-pill status-pending">Pending</span>`;
+                    actionBox = `<div class="pending-pill-text">⏳ Verifying</div>`;
+                }
+
+                html += `
+                    <div class="match-card">
+                        <div class="match-left">
+                            <div class="match-time">${m.time}</div>
+                            <div class="teams">${m.team1} vs ${m.team2}</div>
+                        </div>
+                        <div class="match-right">
+                            ${statusPill}
+                            ${actionBox}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+
+            // Cache latest matches list locally for instant paint on next visit
+            try {
+                localStorage.setItem(LS_MATCHES_KEY, JSON.stringify(
+                    matchesArr.map(m => ({ ...m, timestamp: m.timestamp && m.timestamp.toDate ? m.timestamp.toDate().getTime() : null }))
+                ));
+            } catch (e) { /* storage full or unavailable — ignore, non-critical */ }
+        }
+
+        // Paint instantly from last-known localStorage snapshot, before Firestore even responds
+        function paintFromLocalCache() {
+            try {
+                const raw = localStorage.getItem(LS_MATCHES_KEY);
+                if (!raw) return;
+                const cached = JSON.parse(raw);
+                matchesArr = cached.map(m => ({
+                    ...m,
+                    timestamp: m.timestamp ? { toDate: () => new Date(m.timestamp) } : null
+                }));
+                render();
+            } catch (e) { /* ignore corrupt cache */ }
+        }
+
+        function attachListeners() {
+            // 1) Matches — ab MatchHub Central API se aate hain (har HUB_POLL_MS me refresh)
+            fetchHubMatches();
+            setInterval(fetchHubMatches, HUB_POLL_MS);
+
+            // 2) User's unlocked matches
+            db.collection("unlocked_matches").where("userId", "==", guestId)
+              .onSnapshot(snap => {
+                  unlockedIds = snap.docs.map(doc => doc.data().matchId);
+                  scheduleRender();
+              }, err => console.error("unlocked listener error:", err));
+
+            // 3) User's pending payment requests
+            db.collection("payment_requests").where("userId", "==", guestId).where("status", "==", "pending")
+              .onSnapshot(snap => {
+                  pendingIds = snap.docs.map(doc => doc.data().matchId);
+                  scheduleRender();
+              }, err => console.error("pending listener error:", err));
+        }
+
+        async function fetchHubMatches() {
+            try {
+                const res = await fetch(`${HUB_API_URL}?key=${HUB_SITE_API_KEY}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    console.error("Hub API error:", data.error);
+                    if (!matchesArr.length) {
+                        document.getElementById("matchContainer").innerHTML =
+                            `<div style="text-align:center; color:var(--gray);">Matches abhi available nahi hain.</div>`;
+                    }
+                    return;
+                }
+
+                matchesArr = (data.matches || []).map(m => ({
+                    _id: m.id,
+                    team1: m.teamA,
+                    team2: m.teamB,
+                    time: new Date(m.tossTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    timestamp: { toDate: () => new Date(m.tossTimeMs) },
+                    winner: m.winner || ""
+                }));
+                scheduleRender();
+            } catch (err) {
+                console.error("Hub fetch error:", err);
+                if (!matchesArr.length) {
+                    document.getElementById("matchContainer").innerHTML =
+                        `<div style="text-align:center; color:var(--gray);">Error loading matches.</div>`;
+                }
+            }
+        }
+
+        function loadMatches() {
+            paintFromLocalCache();   // instant paint, 0 reads
+            attachListeners();       // then live-sync, minimal reads via cache+delta
+        }
+
+        // ---- Payment modal: QR/UPI cached locally for 5 min to avoid a read every open ----
+        async function openModal(matchId) {
+            selectedMatchId = matchId;
+            resetScreenshotState();
+
+            const qrImg = document.getElementById('dynamicQRImg');
+            const upiText = document.getElementById('dynamicUpiText');
+
+            try {
+                const cachedRaw = localStorage.getItem(LS_ADMIN_KEY);
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw);
+                    qrImg.src = cached.qrImage || "";
+                    upiText.innerText = "UPI ID: " + (cached.upiId || "Not set by admin");
+                    if (Date.now() - cached.ts < ADMIN_CACHE_TTL_MS) {
+                        document.getElementById('payModal').style.display = 'flex';
+                        return; // fresh enough — skip the read entirely
+                    }
+                }
+            } catch (e) { /* ignore corrupt cache */ }
+
+            document.getElementById('payModal').style.display = 'flex';
+
+            try {
+                const doc = await db.collection("admin_settings").doc("payment_config").get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    const qrSrc = data.qrImage || "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=default@upi";
+                    qrImg.src = qrSrc;
+                    upiText.innerText = "UPI ID: " + (data.upiId || "Not set by admin");
+                    localStorage.setItem(LS_ADMIN_KEY, JSON.stringify({ qrImage: qrSrc, upiId: data.upiId || "", ts: Date.now() }));
+                }
+            } catch(e) {
+                console.error("Error loading QR:", e);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('payModal').style.display = 'none';
+        }
+
+        function showWinnerModal(winner, teams) {
+            document.getElementById('winnerNameText').innerText = winner;
+            document.getElementById('winnerTeamsText').innerText = teams;
+            document.getElementById('winnerModal').style.display = 'flex';
+        }
+
+        function closeWinnerModal() {
+            document.getElementById('winnerModal').style.display = 'none';
+        }
+
+        function resetScreenshotState() {
+            document.getElementById('screenshotInput').value = '';
+            document.getElementById('previewBox').style.display = 'none';
+            document.getElementById('previewImg').src = '';
+            document.getElementById('compressNote').innerText = '';
+            compressedBlob = null;
+        }
+
+      
+      // ---- Fast screenshot pipeline ----
+        // Screenshot select hote hi turant canvas par resize + compress kar dete hain,
+        // taaki "Submit" dabate hi upload chhota & fast ho, wait na karna pade.
+        function compressImage(file, maxDim = 1000, quality = 0.7) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                            height = Math.round(height * (maxDim / width));
+                            width = maxDim;
+                        } else {
+                            width = Math.round(width * (maxDim / height));
+                            height = maxDim;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    URL.revokeObjectURL(url);
+                    canvas.toBlob(blob => {
+                        if (blob) resolve(blob);
+                        else reject(new Error("Compression failed"));
+                    }, 'image/jpeg', quality);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    reject(new Error("Could not read image"));
+                };
+                img.src = url;
+            });
+        }
+
+        async function onScreenshotSelected(event) {
+            const file = event.target.files[0];
+            const previewBox = document.getElementById('previewBox');
+            const previewImg = document.getElementById('previewImg');
+            const note = document.getElementById('compressNote');
+            compressedBlob = null;
+
+            if (!file) {
+                previewBox.style.display = 'none';
+                return;
+            }
+
+            note.innerText = "Optimizing image...";
+            previewBox.style.display = 'block';
+            previewImg.src = URL.createObjectURL(file);
+
+            try {
+                const originalKB = (file.size / 1024).toFixed(0);
+                compressedBlob = await compressImage(file);
+                const newKB = (compressedBlob.size / 1024).toFixed(0);
+                note.innerText = `Ready to upload (${originalKB}KB → ${newKB}KB, compressed for fast upload)`;
+            } catch (e) {
+                console.warn("Compression failed, will upload original:", e);
+                compressedBlob = null;
+                note.innerText = "Ready to upload";
+            }
+        }
+
+        async function submitPayment() {
+            const fileInput = document.getElementById('screenshotInput');
+            if (fileInput.files.length === 0) {
+                alert("Please select or capture a payment screenshot!");
+                return;
+            }
+
+            const btn = document.getElementById('submitBtn');
+            btn.innerText = "Uploading Screenshot...";
+            btn.disabled = true;
+
+            const fileToUpload = compressedBlob || fileInput.files[0];
+            const formData = new FormData();
+            formData.append("image", fileToUpload, "screenshot.jpg");
+
+            try {
+                const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                    method: "POST",
+                    body: formData
+                });
+                const imgData = await res.json();
+
+                if (!imgData.success) {
+                    throw new Error("Image upload failed.");
+                }
+
+                const screenshotUrl = imgData.data.url;
+
+                // Fresh read (bypasses cache) — this is a rare, critical action so
+                // correctness of auto-approval + notifications matters more than saving 1 read.
+                let cfg = {};
+                try {
+                    const cfgDoc = await db.collection("admin_settings").doc("payment_config").get({ source: "server" });
+                    if (cfgDoc.exists) cfg = cfgDoc.data();
+                } catch (e) { console.warn("Could not load admin config:", e); }
+
+                const autoApprove = !!cfg.autoApprove;
+                const finalStatus = autoApprove ? "approved" : "pending";
+
+                await db.collection("payment_requests").add({
+                    userId: guestId,
+                    matchId: selectedMatchId,
+                    screenshot: screenshotUrl,
+                    status: finalStatus,
+                    amount: 10,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                if (autoApprove) {
+                    await db.collection("unlocked_matches").add({
+                        userId: guestId,
+                        matchId: selectedMatchId,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+
+                // Telegram notify — fire and forget, retries in background, never blocks the user
+                const mForNotify = matchesArr.find(x => x._id === selectedMatchId);
+                const matchLabel = mForNotify ? `${mForNotify.team1} vs ${mForNotify.team2}` : selectedMatchId;
+                const notifyText = `New Payment ${autoApprove ? "(Auto-Approved)" : "(Pending Review)"}\nMatch: ${matchLabel}\nUser: ${guestId}\nAmount: Rs 10\nScreenshot: ${screenshotUrl}`;
+                sendTelegramNotification(notifyText, cfg.telegramBotToken, cfg.telegramChatId);
+
+                alert(autoApprove
+                    ? "Payment approved instantly! Winner unlocked."
+                    : "Screenshot submitted successfully! Admin will verify and unlock shortly.");
+                closeModal();
+                // No manual reload needed — the onSnapshot listeners update the UI
+                // automatically the moment Firestore confirms the write.
+            } catch(err) {
+                alert("Error: " + err.message);
+            } finally {
+                btn.innerText = "Submit Screenshot";
+                btn.disabled = false;
+            }
+        }
+
+        // Best-effort Telegram push notification — retries up to 4 times with backoff,
+        // runs in the background and never throws back to the caller so it can't break payment flow.
+        function sendTelegramNotification(text, token, chatId, attempt = 1) {
+            if (!token || !chatId) return;
+            fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: chatId, text: text })
+            }).then(res => {
+                if (!res.ok && attempt < 4) {
+                    setTimeout(() => sendTelegramNotification(text, token, chatId, attempt + 1), 1000 * attempt);
+                }
+            }).catch(() => {
+                if (attempt < 4) {
+                    setTimeout(() => sendTelegramNotification(text, token, chatId, attempt + 1), 1000 * attempt);
+                }
+            });
+        }
+
+        loadMatches();
+    </script>
+</body>
+</html>
