@@ -155,10 +155,11 @@
         let selectedMatchId = null;
         let compressedBlob = null;
 
-        // Live in-memory state, kept in sync by the three listeners below
+        // Live in-memory state, kept in sync by the listeners below
         let matchesArr = [];
         let unlockedIds = [];
         let pendingIds = [];
+        let overridesMap = {};   // matchId -> { hidden, preWinner } — admin.html ke local overrides
         let renderScheduled = false;
 
         function getDateLabel(ts) {
@@ -198,6 +199,9 @@
 
             matchesArr.forEach(m => {
                 const mId = m._id;
+                const ov = overridesMap[mId] || {};
+                if (ov.hidden) return; // admin ne is match ko delete/hide kiya hai
+
                 const isUnlocked = unlockedIds.includes(mId);
                 const isPending = pendingIds.includes(mId);
 
@@ -212,14 +216,14 @@
 
                 if (isUnlocked) {
                     statusPill = `<span class="status-pill status-unlocked"></span>`;
-                    const safeWinner = String(m.winner || "").replace(/'/g, "\\'");
+                    const effectivePreWinner = (ov.preWinner !== undefined && ov.preWinner !== "") ? ov.preWinner : m.preWinner;
+                    const safeWinner = String(effectivePreWinner || "").replace(/'/g, "\\'");
                     const safeTeams = String(`${m.team1} vs ${m.team2}`).replace(/'/g, "\\'");
                     actionBox = `<button class="btn btn-small" onclick="showWinnerModal('${safeWinner}', '${safeTeams}')"> VIEW REPORT</button>`;
                 } else if (isPending) {
                     statusPill = `<span class="status-pill status-pending">Pending</span>`;
                     actionBox = `<div class="pending-pill-text">⏳ Verifying</div>`;
                 }
-
                 html += `
                     <div class="match-card">
                         <div class="match-left">
@@ -233,6 +237,11 @@
                     </div>
                 `;
             });
+
+            if (!html) {
+                container.innerHTML = `<div style="text-align:center; color:var(--gray); padding:20px;">No matches available right now. Check back soon!</div>`;
+                return;
+            }
 
             container.innerHTML = html;
 
@@ -276,8 +285,15 @@
                   pendingIds = snap.docs.map(doc => doc.data().matchId);
                   scheduleRender();
               }, err => console.error("pending listener error:", err));
-        }
 
+            // 4) Admin overrides — delete/hide match ya preWinner change (admin.html se)
+            db.collection("match_overrides").onSnapshot(snap => {
+                const map = {};
+                snap.forEach(doc => { map[doc.id] = doc.data(); });
+                overridesMap = map;
+                scheduleRender();
+            }, err => console.error("overrides listener error:", err));
+        }
         async function fetchHubMatches() {
             try {
                 const res = await fetch(`${HUB_API_URL}?key=${HUB_SITE_API_KEY}`);
@@ -298,7 +314,7 @@
                     team2: m.teamB,
                     time: new Date(m.tossTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     timestamp: { toDate: () => new Date(m.tossTimeMs) },
-                    winner: m.winner || ""
+                    preWinner: m.preWinner || ""
                 }));
                 scheduleRender();
             } catch (err) {

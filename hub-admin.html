@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MatchHub Central — Admin</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{ --primary:#1565c0; --bg:#f4f6f9; --card:#fff; --green:#2e7d32; --red:#c62828; --orange:#e65100; --gray:#607d8b; }
+  *{box-sizing:border-box; font-family: Arial, sans-serif;}
+  body{background:var(--bg); margin:0; padding:14px; color:#222;}
+  h1{font-size:20px; color:var(--primary); margin-bottom:2px;}
+  .sub{font-size:12px; color:#777; margin-bottom:16px;}
+  .card{background:var(--card); border-radius:12px; padding:14px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+  .card h2{font-size:15px; margin-bottom:10px; color:#333;}
+  .input-group{margin-bottom:10px;}
+  label{display:block; font-size:12px; color:#555; margin-bottom:4px; font-weight:600;}
+  input, select{width:100%; padding:9px; border:1px solid #ccc; border-radius:8px; font-size:14px;}
+  .row2{display:flex; gap:8px;}
+  .row2 > div{flex:1;}
+  .btn{border:none; padding:10px 14px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; color:#fff;}
+  .btn-primary{background:var(--primary); width:100%; margin-top:6px;}
+  .btn-green{background:var(--green);}
+  .btn-red{background:var(--red);}
+  .btn-orange{background:var(--orange);}
+  .btn-gray{background:var(--gray);}
+  .btn-small{padding:7px 10px; font-size:11px;}
+  .match-row{border:1px solid #eee; border-radius:10px; padding:10px; margin-bottom:10px;}
+  .match-header{font-weight:700; font-size:14px; margin-bottom:4px;}
+  .badge{display:inline-block; font-size:9px; font-weight:700; padding:2px 7px; border-radius:20px; margin-right:5px; margin-bottom:6px;}
+  .badge-open{background:#e3f2fd; color:var(--primary);}
+  .badge-closed{background:#e8f5e9; color:var(--green);}
+  .badge-void{background:#ffebee; color:var(--red);}
+  .action-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
+  .action-row input{flex:1; min-width:100px; padding:7px; font-size:12px;}
+  .category-header{font-weight:700; color:var(--primary); margin:14px 0 6px; font-size:13px; text-transform:uppercase;}
+  .site-row{border:1px solid #eee; border-radius:10px; padding:10px; margin-bottom:10px;}
+  .site-name{font-weight:700; font-size:14px;}
+  .key-box{background:#f1f3f5; padding:6px 8px; border-radius:6px; font-family:monospace; font-size:11px; word-break:break-all; margin:6px 0;}
+  .toggle-wrap{display:flex; align-items:center; gap:8px; margin-top:6px;}
+  .switch{position:relative; width:42px; height:22px;}
+  .switch input{opacity:0; width:0; height:0;}
+  .slider{position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#ccc; border-radius:22px; transition:.2s;}
+  .slider:before{position:absolute; content:""; height:16px; width:16px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s;}
+  input:checked + .slider{background:var(--green);}
+  input:checked + .slider:before{transform:translateX(20px);}
+ .snippet-box{background:#1e1e1e; color:#9cdcfe; font-family:monospace; font-size:10px; padding:10px; border-radius:8px; white-space:pre-wrap; word-break:break-all; margin-top:8px; max-height:180px; overflow-y:auto;}
+  .match-card{background:#fff; border-radius:10px; padding:8px 10px; margin-bottom:7px; box-shadow:0 1px 4px rgba(0,0,0,0.06); border-left:3px solid var(--primary);}
+  .match-card.is-closed{border-left-color:var(--green);}
+  .match-card.is-void{border-left-color:var(--red);}
+  .match-title{font-weight:700; font-size:13px; margin-bottom:1px;}
+  .match-meta{font-size:10px; color:#999; display:flex; gap:8px; flex-wrap:wrap; margin-bottom:5px;}
+  .win-btns{display:flex; gap:5px; margin-top:5px;}
+  .win-btn{flex:1; padding:7px 5px; border-radius:7px; border:1.2px solid var(--green); background:#f1f8f1; color:var(--green); font-weight:700; font-size:11px; cursor:pointer;}
+  .win-btn:active{background:var(--green); color:#fff;}
+  .util-btns{display:flex; gap:5px; margin-top:5px; flex-wrap:wrap;}
+  .util-btn{flex:1; min-width:62px; padding:6px 5px; border-radius:7px; border:1.2px solid #ddd; background:#fafafa; color:#555; font-weight:700; font-size:10px; cursor:pointer;}
+  .util-btn.danger{border-color:var(--red); color:var(--red);}
+  .void-panel{margin-top:6px; padding:8px; background:#fff5f5; border-radius:8px; border:1px dashed var(--red); display:none;}
+  .void-panel.open{display:block;}
+  .history-toggle{display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:#f1f3f5; border-radius:10px; cursor:pointer; font-weight:700; font-size:12px; color:#555; margin-top:8px; user-select:none;}
+  .history-list{display:none; margin-top:8px;}
+  .history-list.open{display:block;}
+  .match-card.history-item{padding:6px 10px; opacity:0.92;}
+  .match-card.history-item .match-title{font-size:12px;}
+</style>
+</head>
+<body>
+
+<h1>🎯 MatchHub Central</h1>
+<div class="sub">Ek jagah se sab sites control karo — matches, winner, void, undo.</div>
+<div id="bg-sync-frames"></div>
+
+<!-- CREATE MATCH -->
+<div class="card">
+  <h2>➕ Naya Match Add Karo</h2>
+  <div class="row2">
+    <div class="input-group"><label>Team A</label><input id="tA" placeholder="Team A"></div>
+    <div class="input-group"><label>Team B</label><input id="tB" placeholder="Team B"></div>
+  </div>
+  <div class="row2">
+    <div class="input-group">
+      <label>Date</label>
+      <select id="matchDate">
+        <option value="0">Today</option>
+        <option value="1">Tomorrow</option>
+        <option value="2">Day After</option>
+      </select>
+    </div>
+    <div class="input-group"><label>Time</label><input type="time" id="matchTime"></div>
+  </div>
+  <div class="row2">
+    <div class="input-group"><label>Odds A (%)</label><input type="number" id="oddsA" value="98"></div>
+    <div class="input-group"><label>Odds B (%)</label><input type="number" id="oddsB" value="98"></div>
+  </div>
+  <div class="input-group">
+    <label>🔒 Lock — <span id="lockLabel">30</span> min pehle</label>
+    <input type="range" id="lockMins" min="1" max="60" value="30" oninput="document.getElementById('lockLabel').innerText=this.value">
+  </div>
+  <div class="input-group" style="border-top:2px dashed #ddd; padding-top:10px;">
+    <label>🔮 Pre Winner (sirf index/Predict Pro me dikhega, settlement nahi karta)</label>
+    <input id="preWinner" placeholder="e.g. Team A (khaali chhodo agar abhi pata nahi)">
+  </div>
+  <button class="btn btn-primary" id="publishBtn" onclick="createMatch()">Publish Match</button>
+</div>
+
+<!-- BULK TIME-BASED VOID -->
+<div class="card">
+  <h2>⏱️ Time-Based Bulk Void</h2>
+  <div class="sub" style="margin-bottom:10px;">Is time se pehle wale saare OPEN matches ek click me void ho jayenge.</div>
+  <div class="input-group"><label>Cutoff Date & Time</label><input type="datetime-local" id="bulkCutoff"></div>
+  <button class="btn btn-red" style="width:100%;" onclick="bulkTimeVoid()">Void All Before This Time</button>
+</div>
+
+<!-- LIVE MATCHES -->
+<div class="card">
+  <h2>📋 Open Matches</h2>
+  <div id="match-list"><p style="color:#999; font-size:12px;">Loading...</p></div>
+
+  <div class="history-toggle" onclick="toggleHistory()">
+    <span>🗂️ History (<span id="history-count">0</span>)</span>
+    <span id="history-arrow">▼</span>
+  </div>
+  <div id="history-list" class="history-list"></div>
+</div>
+
+<!-- SITES MANAGER -->
+<div class="card">
+  <h2>🌐 Sites Manager</h2>
+  <div class="sub" style="margin-bottom:10px;">Har site ke liye API key banao, on/off karo, aur ready-made connector code copy karo.</div>
+  <div class="input-group">
+    <label>🔗 API Base URL (Cloudflare deploy hone ke baad yahan daalo)</label>
+    <div class="row2">
+      <input id="apiBaseUrl" placeholder="https://matchhub-api.pages.dev">
+      <button class="btn btn-gray btn-small" style="flex:0 0 auto;" onclick="saveApiBaseUrl()">Save</button>
+    </div>
+  </div>
+  <button class="btn btn-green" style="width:100%; margin:8px 0 12px;" onclick="addSite()">+ Nayi Site Jodo</button>
+  <div id="site-list"></div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCjOk9OOqdPiCCgFXJouJjEB0rym0kTL0g",
+  authDomain: "matchhub-central.firebaseapp.com",
+  projectId: "matchhub-central",
+  storageBucket: "matchhub-central.firebasestorage.app",
+  messagingSenderId: "183598326417",
+  appId: "1:183598326417:web:d3a63da242d9b2a2bf9530"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const escJs = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+let editingMatchId = null;
+
+// ==========================================
+// CREATE / EDIT MATCH
+// ==========================================
+async function createMatch() {
+  const tA = document.getElementById('tA').value.trim();
+  const tB = document.getElementById('tB').value.trim();
+  const dateOffset = parseInt(document.getElementById('matchDate').value);
+  const timeStr = document.getElementById('matchTime').value;
+  const lockMins = parseInt(document.getElementById('lockMins').value);
+  const oddsA = document.getElementById('oddsA').value;
+  const oddsB = document.getElementById('oddsB').value;
+  const preWinner = document.getElementById('preWinner').value.trim();
+
+  if (!tA || !tB || !timeStr) { alert("Sab fields bharo!"); return; }
+
+  let matchDate = new Date();
+  matchDate.setDate(matchDate.getDate() + dateOffset);
+  const [h, m] = timeStr.split(':');
+  matchDate.setHours(h, m, 0, 0);
+
+  const tossTimeMs = matchDate.getTime();
+  const lockTimeMs = tossTimeMs - (lockMins * 60000);
+
+  const data = {
+    teamA: tA, teamB: tB,
+    tossTimeMs, lockTimeMs,
+    tossTimeStr: matchDate.toLocaleString(),
+    oddsA, oddsB,
+    preWinner: preWinner || '',
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (editingMatchId) {
+    await db.collection("matches").doc(editingMatchId).update(data);
+    alert("✅ Match Updated!");
+    cancelEdit();
+  } else {
+    data.status = 'open';
+    data.winner = '';
+    data.voidReason = '';
+    data.history = [];
+    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    await db.collection("matches").add(data);
+    alert("✅ Match Live!");
+  }
+
+  document.getElementById('tA').value = '';
+  document.getElementById('tB').value = '';
+  document.getElementById('matchTime').value = '';
+  document.getElementById('preWinner').value = '';
+}
+
+function editMatch(id, teamA, teamB, tossTimeMs, oddsA, oddsB, preWinner) {
+  editingMatchId = id;
+  document.getElementById('tA').value = teamA;
+  document.getElementById('tB').value = teamB;
+  document.getElementById('oddsA').value = oddsA || 98;
+  document.getElementById('oddsB').value = oddsB || 98;
+  document.getElementById('preWinner').value = preWinner || '';
+  const d = new Date(tossTimeMs);
+  const today = new Date();
+  let diff = Math.round((new Date(d.toDateString()) - new Date(today.toDateString())) / 86400000);
+  if (diff < 0) diff = 0; if (diff > 2) diff = 2;
+  document.getElementById('matchDate').value = String(diff);
+  document.getElementById('matchTime').value = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const btn = document.getElementById('publishBtn');
+  btn.innerText = "💾 Update Match";
+  btn.style.background = "#f57c00";
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function cancelEdit() {
+  editingMatchId = null;
+  document.getElementById('preWinner').value = '';
+  const btn = document.getElementById('publishBtn');
+  btn.innerText = "Publish Match";
+  btn.style.background = "";
+}
+
+// ==========================================
+// WINNER / VOID / UNDO
+// ==========================================
+async function snapshotHistory(matchRef, currentData) {
+  const entry = {
+    status: currentData.status || 'open',
+    winner: currentData.winner || '',
+    voidReason: currentData.voidReason || '',
+    changedAt: Date.now()
+  };
+  const hist = currentData.history || [];
+  hist.push(entry);
+  return hist;
+}
+
+async function setWinnerQuick(matchId, teamName) {
+  if (!confirm(`✅ "${teamName}" ko WINNER set karna hai? Confirm karo.`)) return;
+  const ref = db.collection("matches").doc(matchId);
+  const doc = await ref.get();
+  const hist = await snapshotHistory(ref, doc.data());
+  await ref.update({ status: 'closed', winner: teamName, voidReason: '', partialCutoffMs: firebase.firestore.FieldValue.delete(), history: hist, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+function setPreWinnerPrompt(matchId) {
+  const val = prompt("Pre Winner ka naam likho (sirf index me dikhega, settlement nahi karta). Khaali chhodo hatane ke liye.");
+  if (val === null) return;
+  db.collection("matches").doc(matchId).update({ preWinner: val.trim(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+function toggleVoidPanel(matchId) {
+  document.getElementById('void-panel-' + matchId).classList.toggle('open');
+}
+
+async function undoMatch(matchId) {
+  const ref = db.collection("matches").doc(matchId);
+  const doc = await ref.get();
+  const d = doc.data();
+  const hist = d.history || [];
+  if (hist.length === 0) { alert("Undo ke liye history khaali hai."); return; }
+  const last = hist[hist.length - 1];
+  const preview = last.status === 'open' ? 'OPEN (winner hataa diya jayega, bets wapas chalu)' :
+                  last.status === 'closed' ? `CLOSED — Winner: ${last.winner}` :
+                  `VOID (${last.voidReason || 'manual'})`;
+  if (!confirm(`⚠️ Ye match wapas is state me chala jayega:\n${preview}\n\nUsers ki bets bhi isi state ke hisaab se wapas ho jayengi. Confirm karo?`)) return;
+  hist.pop();
+  await ref.update({
+    status: last.status,
+    winner: last.winner || '',
+    voidReason: last.voidReason || '',
+    partialCutoffMs: firebase.firestore.FieldValue.delete(),
+    history: hist,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+function toggleHistory() {
+  const el = document.getElementById('history-list');
+  el.classList.toggle('open');
+  document.getElementById('history-arrow').innerText = el.classList.contains('open') ? '▲' : '▼';
+}
+
+async function confirmFullVoid(matchId) {
+  if (!confirm("Poora match VOID karna hai? Saari bets cancel ho jayengi.")) return;
+  const ref = db.collection("matches").doc(matchId);
+  const doc = await ref.get();
+  const hist = await snapshotHistory(ref, doc.data());
+  await ref.update({ status: 'void', voidReason: 'manual', partialCutoffMs: firebase.firestore.FieldValue.delete(), history: hist, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function confirmCutoffVoid(matchId, teamName, tossTimeMs) {
+  const timeStr = document.getElementById('cutoff-time-' + matchId).value;
+  if (!timeStr) { alert("Pehle cutoff time chuno!"); return; }
+  const [hh, mm] = timeStr.split(':');
+  const cutoffDate = new Date(tossTimeMs);
+  cutoffDate.setHours(parseInt(hh), parseInt(mm), 0, 0);
+  const cutoffMs = cutoffDate.getTime();
+  if (!confirm(`Cutoff ${timeStr} ke PEHLE ki bets → Winner: ${teamName}\nCutoff ke BAAD ki bets → VOID\n\nConfirm?`)) return;
+  const ref = db.collection("matches").doc(matchId);
+  const doc = await ref.get();
+  const hist = await snapshotHistory(ref, doc.data());
+  await ref.update({ status: 'closed', winner: teamName, partialCutoffMs: cutoffMs, voidReason: '', history: hist, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+async function bulkTimeVoid() {
+  const cutoffStr = document.getElementById('bulkCutoff').value;
+  if (!cutoffStr) { alert("Pehle cutoff time chuno!"); return; }
+  const cutoffMs = new Date(cutoffStr).getTime();
+  if (!confirm("Is time se pehle ke SAARE open matches void ho jayenge. Confirm?")) return;
+
+  const snap = await db.collection("matches").where("status", "==", "open").get();
+  const batch = db.batch();
+  let count = 0;
+  snap.forEach(doc => {
+    const d = doc.data();
+    if (d.tossTimeMs <= cutoffMs) {
+      const hist = d.history || [];
+      hist.push({ status: d.status, winner: d.winner || '', voidReason: d.voidReason || '', changedAt: Date.now() });
+      batch.update(doc.ref, { status: 'void', voidReason: 'time-based auto-void', history: hist, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      count++;
+    }
+  });
+  await batch.commit();
+  alert(`✅ ${count} match(es) void ho gaye.`);
+}
+
+// ==========================================
+// RENDER MATCHES
+// ==========================================
+function getCategoryByMs(ms) {
+  const d = new Date(ms), today = new Date(), tmr = new Date(), dayAfter = new Date();
+  tmr.setDate(today.getDate() + 1);
+  dayAfter.setDate(today.getDate() + 2);
+  const sameDay = (a,b) => a.toDateString() === b.toDateString();
+  if (sameDay(d, today)) return "📅 Aaj (Today)";
+  if (sameDay(d, tmr)) return "📅 Kal (Tomorrow)";
+  if (sameDay(d, dayAfter)) return "📅 Parso (Day After)";
+  return "📅 " + d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+}
+
+async function cleanupOldMatches() {
+  const startOfYesterday = new Date();
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  startOfYesterday.setHours(0,0,0,0);
+  const cutoffMs = startOfYesterday.getTime();
+  try {
+    const snap = await db.collection("matches").where("tossTimeMs", "<", cutoffMs).get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log(`🧹 ${snap.size} purane match(es) delete ho gaye.`);
+  } catch(e) { console.error("cleanup failed:", e); }
+}
+cleanupOldMatches();
+
+function buildMatchCard(doc, m, isHistory) {
+  const tDisplay = new Date(m.tossTimeMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const lockDisplay = new Date(m.lockTimeMs || m.tossTimeMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  let badge = `<span class="badge badge-open">OPEN</span>`;
+  if (m.status === 'closed') badge = `<span class="badge badge-closed">🏆 ${m.winner}</span>`;
+  if (m.status === 'void') badge = `<span class="badge badge-void">VOID (${m.voidReason || 'manual'})</span>`;
+  const hasHistory = (m.history || []).length > 0;
+  const preWinnerBadge = m.preWinner ? `<span class="badge" style="background:#fff3cd; color:#856404;">🔮 Pre: ${m.preWinner}</span>` : '';
+  const cardCls = m.status === 'closed' ? 'is-closed' : (m.status === 'void' ? 'is-void' : '');
+
+  if (isHistory) {
+    return `
+      <div class="match-card history-item ${cardCls}">
+        <div class="match-title">${m.teamA} vs ${m.teamB}</div>
+        <div class="match-meta"><span>🕐 ${tDisplay}</span><span>🔒 Lock ${lockDisplay}</span></div>
+        ${badge} ${preWinnerBadge}
+        <div class="util-btns">
+          <button class="util-btn" ${hasHistory ? '' : 'disabled style="opacity:0.4;"'} onclick="undoMatch('${doc.id}')">↩️ Undo (wapas open)</button>
+          <button class="util-btn" onclick="editMatch('${doc.id}','${escJs(m.teamA)}','${escJs(m.teamB)}',${m.tossTimeMs},${m.oddsA||98},${m.oddsB||98},'${escJs(m.preWinner||'')}')">✏️ Edit</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="match-card ${cardCls}">
+      <div class="match-title">${m.teamA} vs ${m.teamB}</div>
+      <div class="match-meta"><span>🕐 Toss ${tDisplay}</span><span>🔒 Lock ${lockDisplay}</span><span>Odds ${m.oddsA||98}/${m.oddsB||98}</span></div>
+      ${badge} ${preWinnerBadge}
+      <div class="win-btns">
+        <button class="win-btn" onclick="setWinnerQuick('${doc.id}','${escJs(m.teamA)}')">✅ ${m.teamA} Jeeta</button>
+        <button class="win-btn" onclick="setWinnerQuick('${doc.id}','${escJs(m.teamB)}')">✅ ${m.teamB} Jeeta</button>
+      </div>
+      <div class="util-btns">
+        <button class="util-btn" onclick="setPreWinnerPrompt('${doc.id}')">🔮 Pre Winner</button>
+        <button class="util-btn danger" onclick="toggleVoidPanel('${doc.id}')">⭕ Void</button>
+        <button class="util-btn" ${hasHistory ? '' : 'disabled style="opacity:0.4;"'} onclick="undoMatch('${doc.id}')">↩️ Undo</button>
+        <button class="util-btn" onclick="editMatch('${doc.id}','${escJs(m.teamA)}','${escJs(m.teamB)}',${m.tossTimeMs},${m.oddsA||98},${m.oddsB||98},'${escJs(m.preWinner||'')}')">✏️ Edit</button>
+      </div>
+      <div class="void-panel" id="void-panel-${doc.id}">
+        <button class="btn btn-red btn-small" style="width:100%; margin-bottom:8px;" onclick="confirmFullVoid('${doc.id}')">⭕ Poora Match Void Karo</button>
+        <div style="font-size:11px; color:#888; margin:6px 0 4px;">— YA — Time se Cutoff Karo (uske pehle winner, baad me void):</div>
+        <input type="time" id="cutoff-time-${doc.id}" style="margin-bottom:6px;">
+        <div class="win-btns" style="margin-top:0;">
+          <button class="win-btn" onclick="confirmCutoffVoid('${doc.id}','${escJs(m.teamA)}',${m.tossTimeMs})">${m.teamA} (pehle waalon ka)</button>
+          <button class="win-btn" onclick="confirmCutoffVoid('${doc.id}','${escJs(m.teamB)}',${m.tossTimeMs})">${m.teamB} (pehle waalon ka)</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+db.collection("matches").orderBy("tossTimeMs", "asc").onSnapshot(snap => {
+  const list = document.getElementById('match-list');
+  const histList = document.getElementById('history-list');
+  const histCount = document.getElementById('history-count');
+
+  if (snap.empty) {
+    list.innerHTML = "<p style='color:#999;font-size:12px;'>Koi match nahi hai.</p>";
+    histList.innerHTML = "";
+    histCount.innerText = "0";
+    return;
+  }
+
+  let openHtml = "";
+  let lastCat = "";
+  const historyEntries = [];
+
+  snap.forEach(doc => {
+    const m = doc.data();
+    if (m.status === 'open') {
+      const cat = getCategoryByMs(m.tossTimeMs);
+      if (cat !== lastCat) { openHtml += `<div class="category-header">${cat}</div>`; lastCat = cat; }
+      openHtml += buildMatchCard(doc, m, false);
+    } else {
+      historyEntries.push({ doc, m });
+    }
+  });
+
+  list.innerHTML = openHtml || "<p style='color:#999;font-size:12px;'>Koi open match nahi hai.</p>";
+
+  historyEntries.sort((a, b) => b.m.tossTimeMs - a.m.tossTimeMs);
+  histList.innerHTML = historyEntries.map(({doc, m}) => buildMatchCard(doc, m, true)).join("");
+  histCount.innerText = historyEntries.length;
+});
+
+// ==========================================
+// SITES MANAGER
+// ==========================================
+let apiBaseUrl = "";
+db.collection("settings").doc("config").onSnapshot(doc => {
+  if (doc.exists) {
+    apiBaseUrl = doc.data().apiBaseUrl || "";
+    document.getElementById('apiBaseUrl').value = apiBaseUrl;
+  }
+});
+
+async function saveApiBaseUrl() {
+  let val = document.getElementById('apiBaseUrl').value.trim().replace(/\/$/, '');
+  await db.collection("settings").doc("config").set({ apiBaseUrl: val }, { merge: true });
+  alert("✅ Saved!");
+}
+
+function genApiKey() {
+  return 'site_' + Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function addSite() {
+  const name = prompt("Site ka naam likho (jaise: Predict Pro)");
+  if (!name) return;
+  const matchesUrl = prompt("Is site ke master-matches.html ka pura URL do (jaise: https://texch98.ink/master-matches.html) — khaali chhod sakte ho, baad me set kar sakte ho");
+  const apiKey = genApiKey();
+  await db.collection("sites").add({
+    siteName: name.trim(),
+    apiKey: apiKey,
+    matchesUrl: (matchesUrl || "").trim(),
+    enabled: true,
+    sendPreWinner: false,
+    canWrite: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function toggleSite(id, current) {
+  await db.collection("sites").doc(id).update({ enabled: !current });
+}
+
+async function toggleSitePreWinner(id, current) {
+  await db.collection("sites").doc(id).update({ sendPreWinner: !current });
+}
+
+async function toggleSiteCanWrite(id, current) {
+  await db.collection("sites").doc(id).update({ canWrite: !current });
+}
+
+async function editSiteUrl(id, current) {
+  const url = prompt(" https://texch98.ink/master-matches.html)", current || "");
+  if (url === null) return;
+  await db.collection("sites").doc(id).update({ matchesUrl: url.trim() });
+}
+function buildSnippet(apiKey) {
+  return `<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"><\\/script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"><\\/script>
+<script>
+const HUB_CONFIG = {
+  apiKey: "${firebaseConfig.apiKey}",
+  authDomain: "${firebaseConfig.authDomain}",
+  projectId: "${firebaseConfig.projectId}"
+};
+const SITE_API_KEY = "${apiKey}";
+const hubApp = firebase.initializeApp(HUB_CONFIG, "hub");
+const hubDb = hubApp.firestore();
+
+async function getHubMatches() {
+  const siteSnap = await hubDb.collection("sites").where("apiKey","==",SITE_API_KEY).limit(1).get();
+  if (siteSnap.empty || siteSnap.docs[0].data().enabled !== true) {
+    return []; // site off hai ya key galat hai
+  }
+  const snap = await hubDb.collection("matches")
+    .where("status","in",["open","closed"])
+    .orderBy("tossTimeMs","asc").get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+<\\/script>`;
+}
+
+function copyApiUrl(apiKey, btnEl) {
+  if (!apiBaseUrl) { alert("Pehle upar API Base URL save karo (Cloudflare deploy hone ke baad milega)."); return; }
+  const url = `${apiBaseUrl}/api/matches?key=${apiKey}`;
+  navigator.clipboard.writeText(url).then(() => {
+    const old = btnEl.innerText;
+    btnEl.innerText = "✅ Copied!";
+    setTimeout(() => btnEl.innerText = old, 1500);
+  });
+}
+
+function copySnippet(apiKey, btnEl) {
+  const text = buildSnippet(apiKey);
+  navigator.clipboard.writeText(text).then(() => {
+    const old = btnEl.innerText;
+    btnEl.innerText = "✅ Copied!";
+    setTimeout(() => btnEl.innerText = old, 1500);
+  });
+}
+
+db.collection("sites").orderBy("createdAt", "asc").onSnapshot(snap => {
+  const list = document.getElementById('site-list');
+  if (snap.empty) { list.innerHTML = "<p style='color:#999;font-size:12px;'>Abhi koi site nahi jodi hai.</p>"; return; }
+  let html = "";
+  snap.forEach(doc => {
+    const s = doc.data();
+    html += `
+      <div class="site-row">
+        <div class="site-name">${s.siteName}</div>
+        <div class="key-box">${s.apiKey}</div>
+        <div class="toggle-wrap">
+          <label class="switch">
+            <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="toggleSite('${doc.id}', ${s.enabled})">
+            <span class="slider"></span>
+          </label>
+          <span style="font-size:12px; color:${s.enabled ? 'var(--green)' : 'var(--red)'}; font-weight:700;">${s.enabled ? 'ON — matches ja rahe hain' : 'OFF — matches band hain'}</span>
+        </div>
+        <div class="toggle-wrap">
+          <label class="switch">
+            <input type="checkbox" ${s.sendPreWinner ? 'checked' : ''} onchange="toggleSitePreWinner('${doc.id}', ${!!s.sendPreWinner})">
+            <span class="slider"></span>
+          </label>
+          <span style="font-size:12px; color:${s.sendPreWinner ? 'var(--green)' : 'var(--gray)'}; font-weight:700;">${s.sendPreWinner ? '🔮 Pre Winner ON' : '🔮 Pre Winner OFF'}</span>
+        </div>
+        <div class="toggle-wrap">
+          <label class="switch">
+            <input type="checkbox" ${s.canWrite ? 'checked' : ''} onchange="toggleSiteCanWrite('${doc.id}', ${!!s.canWrite})">
+            <span class="slider"></span>
+          </label>
+          <span style="font-size:12px; color:${s.canWrite ? 'var(--green)' : 'var(--gray)'}; font-weight:700;">${s.canWrite ? '✍️ Write API ON (settle/void/undo kar sakti hai)' : '✍️ Write API OFF (sirf read-only)'}</span>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+          <button class="btn btn-gray btn-small" onclick="copyApiUrl('${s.apiKey}', this)">🔗 API Link Copy Karo</button>
+          <button class="btn btn-gray btn-small" onclick="copySnippet('${s.apiKey}', this)">📋 Firebase Code Copy Karo</button>
+          <button class="btn btn-orange btn-small" data-site-id="${doc.id}" data-url="${(s.matchesUrl||'').replace(/"/g,'&quot;')}" onclick="editSiteUrl(this.dataset.siteId, this.dataset.url)">🌐 ${s.matchesUrl ? 'Master URL Update' : 'Master URL Set Karo'}</button>
+        </div>
+        ${s.matchesUrl ? `<div style="font-size:10px; color:#999; margin-top:4px;">🔄 BG sync: ${s.matchesUrl}</div>` : ''}
+      </div>
+    `;
+  });
+  list.innerHTML = html;
+
+  const frameBox = document.getElementById('bg-sync-frames');
+  frameBox.innerHTML = "";
+  snap.forEach(doc => {
+    const s = doc.data();
+    if (s.enabled && s.matchesUrl) {
+      const f = document.createElement('iframe');
+      f.src = s.matchesUrl;
+      f.style.cssText = "width:1px;height:1px;border:0;position:absolute;left:-9999px;top:-9999px;";
+      frameBox.appendChild(f);
+    }
+  });
+});
+</script>
+</body>
+</html>
