@@ -30,7 +30,10 @@
         .btn { background: var(--gold); color: #000; border: none; width: 100%; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; text-transform: uppercase; }
         
         .request-item, .match-admin-item { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; margin-bottom: 12px; border-left: 4px solid var(--gold); }
-        .match-admin-item { border-left-color: var(--green); display: flex; justify-content: space-between; align-items: center; }
+        .match-admin-item { border-left-color: var(--green); display: flex; flex-direction: column; gap: 8px; }
+        .match-admin-item .m-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .match-admin-item .m-actions { display: flex; gap: 8px; }
+        .edit-prewinner-btn { background: transparent; color: var(--gold); border: 1px solid var(--gold); padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; flex: 1; }
         
         .request-item p { font-size: 12px; color: var(--gray); margin-bottom: 6px; }
         .request-item p b { color: #fff; }
@@ -58,7 +61,11 @@
         .history-item .h-left span { font-size: 10px; color: var(--gray); }
         .history-item .h-amount { font-family: 'Oswald', sans-serif; color: var(--green); font-size: 16px; font-weight: 700; white-space: nowrap; }
 
-        .reset-note { font-size: 10px; color: var(--gray); text-align: center; margin-top: -4px; margin-bottom: 4px; }
+       .reset-note { font-size: 10px; color: var(--gray); text-align: center; margin-top: -4px; margin-bottom: 4px; }
+
+        .history-thumb { width: 42px; height: 42px; object-fit: cover; border-radius: 6px; border: 1px solid var(--gold); cursor: zoom-in; flex-shrink: 0; }
+        .zoom-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; justify-content: center; align-items: center; padding: 20px; cursor: zoom-out; }
+        .zoom-modal img { max-width: 100%; max-height: 90vh; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -158,6 +165,11 @@
         </div>
     </div>
 
+    <!-- Screenshot Zoom Modal -->
+    <div class="zoom-modal" id="zoomModal" onclick="closeZoom()">
+        <img id="zoomImg" src="" alt="Payment Screenshot">
+    </div>
+
     <script>
         const firebaseConfig = {
           apiKey: "AIzaSyCFKhWdoGWWjIs7Z6yIEOZdx58ybp07jD0",
@@ -174,12 +186,18 @@
         });
 
         const IMGBB_API_KEY = "d31576e535f3516a79211d96d1b21ffa";
+        // 🔗 MatchHub Central — matches yahan se aate hain (same source jo index.html use karta hai)
+        const HUB_API_URL = "https://matchhub-api.pages.dev/api/matches";
+        const HUB_SITE_API_KEY = "site_fe330f77e760f4f9e8ff373b7fecd30b";
+        const HUB_POLL_MS = 30 * 1000;
+
         let existingQrUrl = "";
         let earningsResetAt = null; // ms epoch, null = count all-time
 
         let matchesArr = [];
         let pendingArr = [];
         let approvedArr = [];
+        let overridesMap = {};   // matchId -> { hidden, preWinner } — is site ke local overrides
         let renderScheduled = false;
 
         function getDateLabel(ts) {
@@ -207,13 +225,16 @@
 
         function renderMatches() {
             const container = document.getElementById('activeMatchesContainer');
-            if (!matchesArr.length) {
-                container.innerHTML = `<div class="no-data">No active matches found. Add one above!</div>`;
+            const visible = matchesArr.filter(m => !(overridesMap[m._id] || {}).hidden);
+            if (!visible.length) {
+                container.innerHTML = `<div class="no-data">Koi match live nahi hai (MatchHub se aate hain).</div>`;
                 return;
             }
             let html = "";
             let lastLabel = null;
-            matchesArr.forEach(m => {
+            visible.forEach(m => {
+                const ov = overridesMap[m._id] || {};
+                const effectivePreWinner = (ov.preWinner !== undefined && ov.preWinner !== "") ? ov.preWinner : m.preWinner;
                 const label = getDateLabel(m.timestamp);
                 if (label !== lastLabel) {
                     html += `<div class="section-label">${label}</div>`;
@@ -221,12 +242,17 @@
                 }
                 html += `
                     <div class="match-admin-item">
-                        <div>
-                            <p style="font-size:11px; color:var(--gray); text-transform:uppercase;">${m.time}</p>
-                            <p style="font-size:15px; font-family:'Oswald',sans-serif; color:#fff;">${m.team1} vs ${m.team2}</p>
-                            <p style="font-size:11px; color:var(--green);">Winner: ${m.winner}</p>
+                        <div class="m-top">
+                            <div>
+                                <p style="font-size:11px; color:var(--gray); text-transform:uppercase;">${m.time}</p>
+                                <p style="font-size:15px; font-family:'Oswald',sans-serif; color:#fff;">${m.team1} vs ${m.team2}</p>
+                                <p style="font-size:11px; color:var(--green);">Prediction: ${effectivePreWinner || '—'}</p>
+                            </div>
+                            <button class="delete-btn" onclick="deleteMatch('${m._id}')">Delete</button>
                         </div>
-                        <button class="delete-btn" onclick="deleteMatch('${m._id}')">Delete</button>
+                        <div class="m-actions">
+                            <button class="edit-prewinner-btn" onclick="editPreWinner('${m._id}', '${String(effectivePreWinner || '').replace(/'/g, "\\'")}')">🔮 Prediction Edit Karo</button>
+                        </div>
                     </div>
                 `;
             });
@@ -284,12 +310,14 @@
                 const match = matchesArr.find(m => m._id === r.matchId);
                 const matchLabel = match ? `${match.team1} vs ${match.team2}` : r.matchId;
                 const timeStr = r.timestamp.toDate().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                const thumb = r.screenshot ? `<img src="${r.screenshot}" class="history-thumb" onclick="zoomImage('${r.screenshot}')" alt="Screenshot">` : '';
                 html += `
                     <div class="history-item">
                         <div class="h-left">
                             <p>${matchLabel}</p>
                             <span>${r.userId} • ${timeStr}</span>
                         </div>
+                        ${thumb}
                         <div class="h-amount">₹${r.amount || 10}</div>
                     </div>
                 `;
@@ -297,11 +325,35 @@
             historyContainer.innerHTML = html;
         }
 
-        function attachListeners() {
-            db.collection("matches").orderBy("timestamp", "asc").onSnapshot(snap => {
-                matchesArr = snap.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
+        async function fetchHubMatchesAdmin() {
+            try {
+                const res = await fetch(`${HUB_API_URL}?key=${HUB_SITE_API_KEY}`);
+                const data = await res.json();
+                if (!res.ok) { console.error("Hub API error:", data.error); return; }
+                matchesArr = (data.matches || []).map(m => ({
+                    _id: m.id,
+                    team1: m.teamA,
+                    team2: m.teamB,
+                    time: new Date(m.tossTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    timestamp: { toDate: () => new Date(m.tossTimeMs) },
+                    preWinner: m.preWinner || ""
+                }));
                 scheduleRender();
-            }, err => console.error("matches listener error:", err));
+            } catch (err) {
+                console.error("Hub fetch error:", err);
+            }
+        }
+
+        function attachListeners() {
+            fetchHubMatchesAdmin();
+            setInterval(fetchHubMatchesAdmin, HUB_POLL_MS);
+
+            db.collection("match_overrides").onSnapshot(snap => {
+                const map = {};
+                snap.forEach(doc => { map[doc.id] = doc.data(); });
+                overridesMap = map;
+                scheduleRender();
+            }, err => console.error("overrides listener error:", err));
 
             db.collection("payment_requests").where("status", "==", "pending").onSnapshot(snap => {
                 pendingArr = snap.docs.map(doc => ({ _id: doc.id, ...doc.data() }));
@@ -313,7 +365,6 @@
                 scheduleRender();
             }, err => console.error("approved listener error:", err));
         }
-
         function setAutoApproveButton(isOn) {
             const btn = document.getElementById('autoApproveBtn');
             btn.classList.toggle('on', isOn);
@@ -475,13 +526,31 @@
             }
         }
 
-        async function deleteMatch(matchId) {
-            if (!confirm("Are you sure you want to delete this match?")) return;
+       async function deleteMatch(matchId) {
+            if (!confirm("Is match ko is site se hata (hide) karna hai? MatchHub ya doosri sites par asar nahi hoga.")) return;
             try {
-                await db.collection("matches").doc(matchId).delete();
+                await db.collection("match_overrides").doc(matchId).set({ hidden: true }, { merge: true });
             } catch(e) {
-                alert("Error deleting match: " + e.message);
+                alert("Error hiding match: " + e.message);
             }
+        }
+
+        async function editPreWinner(matchId, currentVal) {
+            const val = prompt("Naya prediction likho (sirf is site ke liye, MatchHub par asar nahi):", currentVal || "");
+            if (val === null) return;
+            try {
+                await db.collection("match_overrides").doc(matchId).set({ preWinner: val.trim() }, { merge: true });
+            } catch(e) {
+                alert("Error updating prediction: " + e.message);
+            }
+        }
+
+        function zoomImage(url) {
+            document.getElementById('zoomImg').src = url;
+            document.getElementById('zoomModal').style.display = 'flex';
+        }
+        function closeZoom() {
+            document.getElementById('zoomModal').style.display = 'none';
         }
 
         async function approveRequest(requestId, userId, matchId) {
